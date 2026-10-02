@@ -29,7 +29,7 @@ import {
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { useClientSettings } from "../hooks/useSettings";
 import {
-  deriveLogicalProjectKeyFromSettings,
+  createProjectGroupingKeyResolver,
   derivePhysicalProjectKeyFromPath,
   selectProjectGroupingSettings,
 } from "../logicalProject";
@@ -47,7 +47,12 @@ import {
   primaryServerConfigEventAtom,
   primaryServerWelcomeAtom,
 } from "../state/server";
-import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
+import {
+  readProject,
+  setActiveEnvironmentId,
+  useActiveEnvironmentId,
+  useProjects,
+} from "../state/entities";
 import {
   createKeybindingsUpdateToastController,
   type KeybindingsUpdateToastController,
@@ -269,6 +274,7 @@ function EventRouter() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const projects = useProjects();
   const primaryEnvironment = usePrimaryEnvironment();
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, {
     reportFailure: false,
@@ -296,7 +302,7 @@ function EventRouter() {
       );
       const bootstrapProjectKey =
         (bootstrapProject
-          ? deriveLogicalProjectKeyFromSettings(bootstrapProject, projectGroupingSettings)
+          ? createProjectGroupingKeyResolver(projects, projectGroupingSettings)(bootstrapProject)
           : null) ??
         (serverConfig?.cwd
           ? derivePhysicalProjectKeyFromPath(payload.environment.environmentId, serverConfig.cwd)

@@ -19,7 +19,7 @@ import {
 import { newDraftId, newThreadId } from "../lib/utils";
 import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
 import {
-  deriveLogicalProjectKeyFromSettings,
+  createProjectGroupingKeyResolver,
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "../logicalProject";
@@ -33,6 +33,10 @@ export function useNewThreadHandler() {
   const projects = useProjects();
   const serverConfigs = useServerConfigs();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const resolveProjectGroupingKey = useMemo(
+    () => createProjectGroupingKeyResolver(projects, projectGroupingSettings),
+    [projects, projectGroupingSettings],
+  );
   const router = useRouter();
   const getCurrentRouteTarget = useCallback(() => {
     const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
@@ -67,7 +71,7 @@ export function useNewThreadHandler() {
       const environmentSettings =
         serverConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
       const logicalProjectKey = project
-        ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
+        ? resolveProjectGroupingKey(project)
         : scopedProjectKey(projectRef);
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
@@ -186,7 +190,7 @@ export function useNewThreadHandler() {
         });
       })();
     },
-    [getCurrentRouteTarget, projectGroupingSettings, projects, router, serverConfigs],
+    [getCurrentRouteTarget, resolveProjectGroupingKey, projects, router, serverConfigs],
   );
 }
 

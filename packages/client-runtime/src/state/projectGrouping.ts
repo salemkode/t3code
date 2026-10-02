@@ -148,6 +148,34 @@ export function deriveLogicalProjectKeyFromSettings(
   });
 }
 
+export function createProjectGroupingKeyResolver(
+  projects: ReadonlyArray<
+    Pick<EnvironmentProject, "environmentId" | "id" | "workspaceRoot" | "repositoryIdentity">
+  >,
+  settings: ProjectGroupingSettings,
+) {
+  const pathsByEnvironment = new Map<string, string>();
+  const ambiguousKeys = new Set<string>();
+  for (const project of projects) {
+    const logicalKey = deriveLogicalProjectKeyFromSettings(project, settings);
+    const physicalKey = derivePhysicalProjectKey(project);
+    if (logicalKey === physicalKey) continue;
+    const environmentKey = JSON.stringify([project.environmentId, logicalKey]);
+    const existingPath = pathsByEnvironment.get(environmentKey);
+    if (existingPath !== undefined && existingPath !== physicalKey) {
+      ambiguousKeys.add(logicalKey);
+    }
+    pathsByEnvironment.set(environmentKey, physicalKey);
+  }
+
+  // A remote identifies a repository, not a checkout. If an environment has
+  // multiple folders for a group, there is no safe cross-environment pairing.
+  return (project: (typeof projects)[number]) => {
+    const logicalKey = deriveLogicalProjectKeyFromSettings(project, settings);
+    return ambiguousKeys.has(logicalKey) ? derivePhysicalProjectKey(project) : logicalKey;
+  };
+}
+
 export function deriveLogicalProjectKeyFromRef(
   projectRef: ScopedProjectRef,
   project:
