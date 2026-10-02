@@ -155,10 +155,7 @@ import { useEnvironmentSettings } from "../hooks/useSettings";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import { resolveNewDraftStartFromOrigin } from "../lib/chatThreadActions";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  selectProjectGroupingSettings,
-} from "../logicalProject";
+import { createProjectGroupingKeyResolver, selectProjectGroupingSettings } from "../logicalProject";
 import { buildDraftThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
@@ -1594,12 +1591,14 @@ function ChatViewContent(props: ChatViewProps) {
     [retryEnvironment],
   );
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
+  const resolveProjectGroupingKey = useMemo(
+    () => createProjectGroupingKeyResolver(allProjects, projectGroupingSettings),
+    [allProjects, projectGroupingSettings],
+  );
   const logicalProjectEnvironments = useMemo(() => {
     if (!activeProject) return [];
-    const logicalKey = deriveLogicalProjectKeyFromSettings(activeProject, projectGroupingSettings);
-    const memberProjects = allProjects.filter(
-      (p) => deriveLogicalProjectKeyFromSettings(p, projectGroupingSettings) === logicalKey,
-    );
+    const logicalKey = resolveProjectGroupingKey(activeProject);
+    const memberProjects = allProjects.filter((p) => resolveProjectGroupingKey(p) === logicalKey);
     const seen = new Set<string>();
     const envs: Array<{
       environmentId: EnvironmentId;
@@ -1625,7 +1624,13 @@ function ChatViewContent(props: ChatViewProps) {
       return a.label.localeCompare(b.label);
     });
     return envs;
-  }, [activeProject, allProjects, projectGroupingSettings, primaryEnvironmentId, environmentById]);
+  }, [
+    activeProject,
+    allProjects,
+    resolveProjectGroupingKey,
+    primaryEnvironmentId,
+    environmentById,
+  ]);
   const hasMultipleEnvironments = logicalProjectEnvironments.length > 1;
 
   const openPullRequestDialog = useCallback(
@@ -1651,10 +1656,7 @@ function ChatViewContent(props: ChatViewProps) {
         throw new Error("No active project is available for this pull request.");
       }
       const activeProjectRef = scopeProjectRef(activeProject.environmentId, activeProject.id);
-      const logicalProjectKey = deriveLogicalProjectKeyFromSettings(
-        activeProject,
-        projectGroupingSettings,
-      );
+      const logicalProjectKey = resolveProjectGroupingKey(activeProject);
       const storedDraftSession = getDraftSessionByLogicalProjectKey(logicalProjectKey);
       if (storedDraftSession) {
         setDraftThreadContext(storedDraftSession.draftId, input);
@@ -1715,7 +1717,7 @@ function ChatViewContent(props: ChatViewProps) {
       getDraftSessionByLogicalProjectKey,
       isServerThread,
       navigate,
-      projectGroupingSettings,
+      resolveProjectGroupingKey,
       routeKind,
       setDraftThreadContext,
       setLogicalProjectDraftThreadId,

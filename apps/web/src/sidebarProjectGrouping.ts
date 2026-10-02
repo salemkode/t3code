@@ -1,7 +1,7 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ScopedProjectRef } from "@t3tools/contracts";
 import {
-  deriveLogicalProjectKeyFromSettings,
+  createProjectGroupingKeyResolver,
   derivePhysicalProjectKey,
   deriveProjectGroupLabel,
   type ProjectGroupingSettings,
@@ -72,26 +72,34 @@ function collectProjectWinnersByPhysicalKey(input: {
   settings: ProjectGroupingSettings;
   primaryEnvironmentId: EnvironmentId | null;
 }): Map<string, SidebarProjectGroupCandidate> {
-  const winnersByPhysicalKey = new Map<string, SidebarProjectGroupCandidate>();
+  const winnersByPhysicalKey = new Map<string, Project>();
   for (const project of input.projects) {
-    const logicalKey = deriveLogicalProjectKeyFromSettings(project, input.settings);
     const physicalProjectKey = derivePhysicalProjectKey(project);
     const existing = winnersByPhysicalKey.get(physicalProjectKey);
     if (!existing) {
-      winnersByPhysicalKey.set(physicalProjectKey, { logicalKey, project });
+      winnersByPhysicalKey.set(physicalProjectKey, project);
       continue;
     }
     if (
       shouldReplaceDuplicateMember({
-        existingMember: existing.project,
+        existingMember: existing,
         candidateMember: project,
         primaryEnvironmentId: input.primaryEnvironmentId,
       })
     ) {
-      winnersByPhysicalKey.set(physicalProjectKey, { logicalKey, project });
+      winnersByPhysicalKey.set(physicalProjectKey, project);
     }
   }
-  return winnersByPhysicalKey;
+  const resolveProjectKey = createProjectGroupingKeyResolver(
+    Array.from(winnersByPhysicalKey.values()),
+    input.settings,
+  );
+  return new Map(
+    Array.from(winnersByPhysicalKey, ([physicalKey, project]) => [
+      physicalKey,
+      { project, logicalKey: resolveProjectKey(project) },
+    ]),
+  );
 }
 
 export function buildPhysicalToLogicalProjectKeyMap(input: {
@@ -136,7 +144,8 @@ export function buildSidebarProjectSnapshots(input: {
   const result: SidebarProjectSnapshot[] = [];
   const seen = new Set<string>();
   for (const project of input.projects) {
-    const logicalKey = deriveLogicalProjectKeyFromSettings(project, input.settings);
+    const logicalKey = winnersByPhysicalKey.get(derivePhysicalProjectKey(project))?.logicalKey;
+    if (logicalKey === undefined) continue;
     if (seen.has(logicalKey)) {
       continue;
     }

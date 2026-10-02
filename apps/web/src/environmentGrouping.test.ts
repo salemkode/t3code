@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ProviderInstanceId } from "@t3tools/contracts
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  createProjectGroupingKeyResolver,
   deriveLogicalProjectKey,
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKey,
@@ -47,6 +48,34 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 }
 
 describe("environment grouping", () => {
+  it("keeps separate checkouts of the same repository in separate sidebar and draft groups", () => {
+    const projects = ["/tmp/first", "/tmp/second"].map((workspaceRoot, index) =>
+      makeProject({ id: ProjectId.make(`project-${index}`), workspaceRoot, repositoryIdentity }),
+    );
+    const resolveProjectKey = createProjectGroupingKeyResolver(projects, defaultGroupingSettings);
+    const mapping = buildPhysicalToLogicalProjectKeyMap({
+      projects,
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+    });
+    const snapshots = buildSidebarProjectSnapshots({
+      projects,
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+
+    expect(snapshots).toHaveLength(2);
+    for (const project of projects) {
+      const physicalKey = derivePhysicalProjectKey(project);
+      expect(resolveProjectKey(project)).toBe(physicalKey);
+      expect(mapping.get(physicalKey)).toBe(physicalKey);
+      expect(
+        snapshots.find((snapshot) => snapshot.projectKey === physicalKey)?.memberProjects,
+      ).toEqual([expect.objectContaining({ id: project.id })]);
+    }
+  });
+
   it("groups matching repository identities across environments", () => {
     const primary = makeProject({ repositoryIdentity });
     const remote = makeProject({

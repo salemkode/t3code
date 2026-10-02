@@ -1,4 +1,5 @@
 export {
+  createProjectGroupingKeyResolver,
   deriveLogicalProjectKey,
   deriveLogicalProjectKeyFromRef,
   deriveLogicalProjectKeyFromSettings,
