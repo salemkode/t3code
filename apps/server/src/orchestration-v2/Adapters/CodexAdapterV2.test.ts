@@ -1861,6 +1861,13 @@ describe("CodexAdapterV2 post-settle continuation", () => {
             createdBy: "user",
             creationSource: "web",
           });
+          yield* orchestrator.dispatch({
+            type: "thread.goal.refresh",
+            commandId: CommandId.make("refresh-empty-goal-thread"),
+            threadId,
+          });
+          yield* worker.drain();
+          assert.isNull((yield* orchestrator.getThreadProjection(threadId)).thread.goal ?? null);
           const command = {
             type: "thread.goal.set",
             commandId: CommandId.make("set-durable-goal"),

@@ -9080,21 +9080,21 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             cause: "Native Goals are unavailable for this thread.",
           });
         }
-        if (command.type !== "thread.goal.refresh") {
-          yield* emit(
-            events,
-            command,
-          )({
-            type: "thread.goal-updated",
-            threadId: thread.id,
-            providerInstanceId: thread.providerInstanceId,
-            occurredAt: yield* DateTime.now,
-            payload: {
-              ...thread,
-              goalOperation: { requestId: command.commandId, status: "pending" },
-            },
-          });
-        }
+        yield* emit(
+          events,
+          command,
+        )({
+          type: "thread.goal-updated",
+          threadId: thread.id,
+          providerInstanceId: thread.providerInstanceId,
+          occurredAt: yield* DateTime.now,
+          payload: {
+            ...thread,
+            ...(command.type === "thread.goal.refresh"
+              ? {}
+              : { goalOperation: { requestId: command.commandId, status: "pending" as const } }),
+          },
+        });
         yield* Ref.update(effects, (existing) => [
           ...existing,
           {
