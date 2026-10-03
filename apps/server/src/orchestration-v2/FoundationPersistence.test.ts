@@ -3222,3 +3222,108 @@ it.live("keeps claiming new work after repeated idle periods", () =>
     }).pipe(Effect.provide(workerLayer), Effect.scoped);
   }).pipe(Effect.provide(TestLayer)),
 );
+
+it.effect("rebuilds persisted native Goals and their operation state from V2 events", () =>
+  Effect.gen(function* () {
+    const sink = yield* EventSink.EventSinkV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const maintenance = yield* ProjectionMaintenance.ProjectionMaintenanceV2;
+    const now = yield* DateTime.now;
+    const threadId = ThreadId.make("thread:goal-rebuild");
+    const thread = makeThread(threadId, now);
+    const goal = {
+      objective: "Finish the native Goal",
+      status: "budgetLimited",
+      createdAt: DateTime.formatIso(now),
+      updatedAt: DateTime.formatIso(now),
+      timeUsedSeconds: 81,
+      tokensUsed: 2048,
+      tokenBudget: 2048,
+    } as const;
+    const persisted = {
+      ...thread,
+      goal,
+      goalSynchronization: { runtimeId: "codex-runtime", sequence: 7 },
+      goalOperation: { requestId: CommandId.make("goal-budget-edit"), status: "pending" as const },
+    };
+    yield* sink.write({
+      events: [
+        threadCreatedEvent({ id: "event:goal-rebuild:created", thread, now }),
+        {
+          id: EventId.make("event:goal-rebuild:updated"),
+          type: "thread.goal-updated",
+          threadId,
+          occurredAt: now,
+          payload: persisted,
+        },
+      ],
+    });
+    assert.isTrue((yield* maintenance.rebuild).valid);
+    assert.deepEqual((yield* projections.getThread(threadId)).goal, goal);
+    assert.deepEqual(
+      (yield* projections.getThread(threadId)).goalOperation,
+      persisted.goalOperation,
+    );
+    yield* sink.write({
+      events: [
+        {
+          id: EventId.make("event:goal-rebuild:cleared"),
+          type: "thread.goal-updated",
+          threadId,
+          occurredAt: now,
+          payload: { ...persisted, goal: null, goalOperation: null },
+        },
+      ],
+    });
+    assert.isTrue((yield* maintenance.rebuild).valid);
+    assert.isNull((yield* projections.getThread(threadId)).goal);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
+it.effect("queues durable native synchronization for active Goals after restart", () =>
+  Effect.gen(function* () {
+    const sink = yield* EventSink.EventSinkV2;
+    const outbox = yield* EffectOutbox.EffectOutboxV2;
+    const now = yield* DateTime.now;
+    for (const status of ["active", "paused", "complete"] as const) {
+      const threadId = ThreadId.make(`thread:goal-restart:${status}`);
+      const thread = {
+        ...makeThread(threadId, now),
+        activeProviderThreadId: ProviderThreadId.make(`provider-thread:goal:${status}`),
+        goal: {
+          objective: "Finish the Goal",
+          status,
+          createdAt: DateTime.formatIso(now),
+          updatedAt: DateTime.formatIso(now),
+          timeUsedSeconds: 12,
+          tokensUsed: 500,
+          tokenBudget: 4000,
+        },
+      };
+      yield* sink.write({
+        events: [threadCreatedEvent({ id: `event:goal-restart:${status}`, thread, now })],
+      });
+    }
+    const recovery = yield* ProviderRuntimeRecovery.make.pipe(
+      Effect.provide(ServerSettings.layerTest()),
+    );
+    yield* recovery.recover;
+    const first = yield* outbox.claimNext({
+      workerId: "goal-restart-test",
+      leaseDurationMs: 10000,
+    });
+    assert.isTrue(Option.isSome(first));
+    if (Option.isNone(first)) return yield* Effect.die("Expected Goal recovery effect");
+    assert.equal(first.value.threadId, ThreadId.make("thread:goal-restart:active"));
+    assert.deepEqual(first.value.request, {
+      type: "thread-goal.update",
+      providerInstanceId,
+      operation: { type: "refresh" },
+    });
+    assert.isTrue(
+      Option.isNone(
+        yield* outbox.claimNext({ workerId: "goal-restart-test", leaseDurationMs: 10000 }),
+      ),
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);

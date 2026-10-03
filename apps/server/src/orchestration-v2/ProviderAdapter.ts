@@ -1,5 +1,7 @@
 import type { OrchestrationV2HistoricalMessage } from "@t3tools/contracts";
 import {
+  OrchestrationV2ThreadGoal,
+  type OrchestrationV2GoalUpdate,
   ChatAttachment,
   CheckpointId,
   MessageId,
@@ -23,6 +25,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   PositiveInt,
+  NonNegativeInt,
   ProviderUserInputAnswers,
   ProviderSessionId,
   ProviderThreadId,
@@ -76,6 +79,15 @@ export const ProviderAdapterV2SessionStatus = Schema.Literals([
 export type ProviderAdapterV2SessionStatus = typeof ProviderAdapterV2SessionStatus.Type;
 
 export const ProviderAdapterV2Event = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("goal.updated"),
+    driver: ProviderDriverKind,
+    threadId: ThreadId,
+    providerThreadId: ProviderThreadId,
+    goal: Schema.NullOr(OrchestrationV2ThreadGoal),
+    runtimeId: Schema.String,
+    sequence: NonNegativeInt,
+  }),
   Schema.Struct({
     type: Schema.Literal("app_thread.created"),
     driver: ProviderDriverKind,
@@ -386,6 +398,7 @@ export interface ProviderAdapterV2OpenSessionInput {
 }
 
 export interface ProviderAdapterV2EnsureThreadInput {
+  readonly configureForGoal?: boolean;
   readonly threadId: ThreadId;
   readonly modelSelection: ModelSelection;
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
@@ -521,10 +534,30 @@ export interface ProviderAdapterV2SessionRuntime {
    * Compaction thresholds are still discarded. Unknown transitions invalidate usage.
    */
   readonly canReuseContextUsage?: (previous: ModelSelection, next: ModelSelection) => boolean;
+  readonly getGoal?: (
+    providerThread: OrchestrationV2ProviderThread,
+  ) => Effect.Effect<
+    Extract<ProviderAdapterV2Event, { type: "goal.updated" }>,
+    ProviderAdapterV2Error
+  >;
+  readonly setGoal?: (
+    providerThread: OrchestrationV2ProviderThread,
+    update: OrchestrationV2GoalUpdate,
+  ) => Effect.Effect<
+    Extract<ProviderAdapterV2Event, { type: "goal.updated" }>,
+    ProviderAdapterV2Error
+  >;
+  readonly clearGoal?: (
+    providerThread: OrchestrationV2ProviderThread,
+  ) => Effect.Effect<
+    Extract<ProviderAdapterV2Event, { type: "goal.updated" }>,
+    ProviderAdapterV2Error
+  >;
   readonly ensureThread: (
     input: ProviderAdapterV2EnsureThreadInput,
   ) => Effect.Effect<OrchestrationV2ProviderThread, ProviderAdapterV2Error>;
   readonly resumeThread: (input: {
+    readonly configureForGoal?: boolean;
     readonly providerThread: OrchestrationV2ProviderThread;
     readonly threadId?: ThreadId;
     readonly modelSelection?: ModelSelection;

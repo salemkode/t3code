@@ -422,6 +422,7 @@ import {
   resolveComposerTimelineInset,
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
+import { ThreadGoal } from "./chat/ThreadGoal";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -10603,6 +10604,22 @@ export default function ChatView(props: ChatViewProps) {
               : {})}
           />
         </header>
+
+        {serverProjection !== null &&
+        activeProviderStatus?.driver === "codex" &&
+        serverConfig?.environment.capabilities.nativeGoals === true ? (
+          <ThreadGoal
+            key={activeThreadKey}
+            thread={serverProjection.thread}
+            environmentId={activeThread.environmentId}
+            supportsTokenBudget={
+              serverProjection.providerSessions.find(
+                (session) =>
+                  session.providerInstanceId === serverProjection.thread.providerInstanceId,
+              )?.capabilities.goals?.supportsTokenBudget ?? true
+            }
+          />
+        ) : null}
 
         {/* Main content area with optional plan sidebar */}
         <div className="relative flex min-h-0 min-w-0 flex-1">

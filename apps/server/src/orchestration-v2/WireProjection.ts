@@ -142,6 +142,9 @@ export function projectThreadProjectionForWire(
 export function projectDomainEventForWire(
   event: OrchestrationV2DomainEvent,
 ): OrchestrationV2DomainEvent {
+  // Goal state is optional thread metadata to older clients. Keep the durable
+  // event distinct while sending the existing event kind under version skew.
+  if (event.type === "thread.goal-updated") return { ...event, type: "thread.metadata-updated" };
   return event.type === "turn-item.updated"
     ? { ...event, payload: projectTurnItemForWire(event.payload) }
     : event.type === "context-handoff.updated"

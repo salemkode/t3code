@@ -795,8 +795,37 @@ export const make = Effect.gen(function* () {
   );
 
   const recover = Effect.gen(function* () {
-    return (yield* reconcile("startup")) satisfies ProviderRuntimeRecoverySummary;
-  });
+    const summary = yield* reconcile("startup");
+    // Codex restores its own active Goal loop on native thread resume. Queue
+    // that synchronization durably rather than synthesizing a user prompt.
+    const snapshot = yield* projections.getShellSnapshot();
+    for (const thread of snapshot.threads) {
+      if (thread.goal?.status !== "active" || thread.activeProviderThreadId === null) continue;
+      const commandId = yield* ids.allocate.command({
+        fixtureName: "goal-recovery",
+        commandName: "refresh",
+      });
+      yield* eventSink.writeWithEffects({
+        commandId,
+        events: [],
+        effects: [
+          {
+            id: `effect:${commandId}:thread-goal.update`,
+            commandId,
+            threadId: thread.id,
+            request: {
+              type: "thread-goal.update",
+              providerInstanceId: thread.providerInstanceId,
+              operation: { type: "refresh" },
+            },
+          },
+        ],
+      });
+    }
+    return summary;
+  }).pipe(
+    Effect.mapError((cause) => new ProviderRuntimeRecoveryError({ operation: "reconcile", cause })),
+  );
 
   return ProviderRuntimeRecoveryService.of({ reconcile, prepareForShutdown, recover });
 });

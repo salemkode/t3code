@@ -12,6 +12,8 @@ import {
   type OrchestrationV2Run,
   type OrchestrationV2TurnItem,
   ProviderDriverKind,
+  ProviderThreadId,
+  type OrchestrationV2ThreadGoal,
   ProviderInstanceId,
   PlanId,
   RunAttemptId,
@@ -1339,3 +1341,79 @@ layer("ProviderEventIngestorV2", (it) => {
     }),
   );
 });
+
+it.effect(
+  "persists native Goal statuses, rejects stale responses, and projects provider clears",
+  () =>
+    Effect.gen(function* () {
+      const sink = yield* EventSink.EventSinkV2;
+      const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const now = yield* DateTime.now;
+      const created = yield* threadCreatedEvent(now);
+      yield* sink.write({ events: [created] });
+      if (created.type !== "thread.created") return yield* Effect.die("Expected thread creation");
+      const thread = created.payload;
+      const providerThreadId = thread.activeProviderThreadId;
+      if (providerThreadId === null) return yield* Effect.die("Expected native binding");
+      const providerSessionId = yield* (yield* IdAllocator.IdAllocatorV2).allocate.providerSession({
+        threadId: thread.id,
+        providerInstanceId: modelSelection.instanceId,
+      });
+      const ingest = (
+        sequence: number,
+        goal: OrchestrationV2ThreadGoal | null,
+        target = providerThreadId,
+      ) =>
+        ingestor.ingestNormalized({
+          providerSessionId,
+          providerInstanceId: modelSelection.instanceId,
+          threadId: thread.id,
+          event: {
+            type: "goal.updated",
+            driver: CODEX_DRIVER,
+            threadId: thread.id,
+            providerThreadId: target,
+            runtimeId: "goal-runtime",
+            sequence,
+            goal,
+          },
+        });
+      const native = {
+        objective: "Finish the native Goal",
+        createdAt: DateTime.formatIso(now),
+        updatedAt: DateTime.formatIso(now),
+        timeUsedSeconds: 17,
+        tokensUsed: 142,
+        tokenBudget: 1000,
+      };
+      const statuses = [
+        "active",
+        "paused",
+        "blocked",
+        "usageLimited",
+        "budgetLimited",
+        "complete",
+      ] as const;
+      for (const [index, status] of statuses.entries()) {
+        const goal = { ...native, status };
+        yield* ingest(index + 1, goal);
+        assert.deepEqual((yield* projections.getThread(thread.id)).goal, goal);
+        assert.deepEqual((yield* projections.getShellSnapshot()).threads[0]?.goal, goal);
+      }
+      assert.deepEqual(yield* ingest(1, { ...native, status: "active" }), []);
+      assert.equal((yield* projections.getThread(thread.id)).goal?.status, "complete");
+      yield* ingest(7, null);
+      assert.isNull((yield* projections.getThread(thread.id)).goal);
+      assert.deepEqual(yield* ingest(6, { ...native, status: "active" }), []);
+      assert.deepEqual(
+        yield* ingest(
+          8,
+          { ...native, status: "active" },
+          ProviderThreadId.make("obsolete-provider-thread"),
+        ),
+        [],
+      );
+      assert.isNull((yield* projections.getThread(thread.id)).goal);
+    }).pipe(Effect.provide(TestLayer)),
+);

@@ -33,6 +33,7 @@ import * as ProjectStore from "./ProjectStore.ts";
 import { layerFromProviderInstanceRegistry as providerAdapterRegistryLayerFromProviderInstances } from "./ProviderAdapterRegistry.ts";
 import { layer as providerContinuationRequestsLayer } from "./ProviderContinuationRequests.ts";
 import { workerLive as providerContinuationWorkerLive } from "./ProviderContinuationService.ts";
+import * as ThreadGoalService from "./ThreadGoalService.ts";
 import { layer as threadTitleRegenerationServiceLayer } from "./ThreadTitleRegenerationService.ts";
 import { layer as providerEventIngestorLayer } from "./ProviderEventIngestor.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
@@ -267,6 +268,20 @@ const providerContinuationWorkerProvided = providerContinuationWorkerLive.pipe(
 const threadTitleRegenerationProvided = threadTitleRegenerationServiceLayer.pipe(
   Layer.provide(Layer.mergeAll(threadManagementProvided, ProjectStore.layer, TextGeneration.layer)),
 );
+const threadGoalProvided = ThreadGoalService.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      projectionStoreLayer,
+      providerSessionManagerProvided,
+      providerEventIngestorProvided,
+      idAllocatorLayer,
+      runtimePolicyProvided,
+      eventSinkProvided,
+      ThreadCommandExecutor.layer,
+    ),
+  ),
+);
+
 const effectExecutorProvided = effectExecutorLayer.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -277,6 +292,7 @@ const effectExecutorProvided = effectExecutorLayer.pipe(
       providerTurnStartServiceProvided,
       runtimeRequestServiceProvided,
       threadTitleRegenerationProvided,
+      threadGoalProvided,
       threadManagementProvided,
     ),
   ),
