@@ -249,6 +249,8 @@ function sessionKey(providerSessionId: ProviderSessionId): string {
  */
 function sessionScopedRuntimeRequestThreadId(event: ProviderAdapterV2Event): ThreadId | undefined {
   switch (event.type) {
+    case "goal.updated":
+      return event.threadId;
     case "runtime_request.updated":
       return event.runtimeRequest.providerTurnId === null ? event.threadId : undefined;
     case "node.updated":

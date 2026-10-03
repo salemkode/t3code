@@ -1,4 +1,7 @@
 import {
+  ProviderInstanceId,
+  OrchestrationV2GoalUpdate,
+  OrchestrationV2ThreadGoal,
   CheckpointId,
   CheckpointScopeId,
   CommandId,
@@ -96,6 +99,15 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     attachmentIds: Schema.Array(Schema.String),
   }),
   Schema.Struct({
+    type: Schema.Literal("thread-goal.update"),
+    previousGoal: Schema.optional(Schema.NullOr(OrchestrationV2ThreadGoal)),
+    providerInstanceId: ProviderInstanceId,
+    operation: Schema.Union([
+      Schema.Struct({ type: Schema.Literal("set"), ...OrchestrationV2GoalUpdate.fields }),
+      Schema.Struct({ type: Schema.Literals(["clear", "refresh"]) }),
+    ]),
+  }),
+  Schema.Struct({
     type: Schema.Literal("thread-title.generate"),
     kind: Schema.Union([
       Schema.Struct({ type: Schema.Literal("initial"), messageId: MessageId }),
@@ -113,6 +125,7 @@ export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "terminal.cleanup",
   "attachment.cleanup",
   "thread-title.generate",
+  "thread-goal.update",
 ] as const satisfies ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
 
 export const PROCESS_BOUND_EFFECT_TYPES = [

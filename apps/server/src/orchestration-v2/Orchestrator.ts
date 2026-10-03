@@ -367,6 +367,9 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.active.reorder":
     case "thread.visit":
     case "thread.mark-unread":
+    case "thread.goal.set":
+    case "thread.goal.clear":
+    case "thread.goal.refresh":
     case "thread.metadata.update":
     case "thread.pull-request.link":
     case "thread.pull-request.unlink":
@@ -2891,6 +2894,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             ...thread,
             providerInstanceId: command.modelSelection.instanceId,
             modelSelection: command.modelSelection,
+            ...(thread.providerInstanceId === command.modelSelection.instanceId
+              ? {}
+              : {
+                  goal: null,
+                  goalOperation: null,
+                  goalSynchronization: null,
+                }),
             updatedAt: now,
           };
       }
@@ -9047,6 +9057,70 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         }
       | undefined;
     switch (command.type) {
+      case "thread.goal.set":
+      case "thread.goal.clear":
+      case "thread.goal.refresh": {
+        const thread = yield* projectionStore
+          .getThread(command.threadId)
+          .pipe(mapDispatchError(command));
+        const adapter = yield* providerAdapters
+          .get(thread.providerInstanceId)
+          .pipe(mapDispatchError(command));
+        const capabilities = yield* adapter.getCapabilities().pipe(mapDispatchError(command));
+        if (
+          thread.deletedAt !== null ||
+          capabilities.goals === undefined ||
+          (command.type === "thread.goal.set" &&
+            command.tokenBudget != null &&
+            !capabilities.goals.supportsTokenBudget)
+        ) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: "Native Goals are unavailable for this thread.",
+          });
+        }
+        yield* emit(
+          events,
+          command,
+        )({
+          type: "thread.goal-updated",
+          threadId: thread.id,
+          providerInstanceId: thread.providerInstanceId,
+          occurredAt: yield* DateTime.now,
+          payload: {
+            ...thread,
+            ...(command.type === "thread.goal.refresh"
+              ? {}
+              : { goalOperation: { requestId: command.commandId, status: "pending" as const } }),
+          },
+        });
+        yield* Ref.update(effects, (existing) => [
+          ...existing,
+          {
+            id: `effect:${command.commandId}:thread-goal.update`,
+            commandId: command.commandId,
+            threadId: command.threadId,
+            request: {
+              type: "thread-goal.update",
+              previousGoal: thread.goal ?? null,
+              providerInstanceId: thread.providerInstanceId,
+              operation:
+                command.type === "thread.goal.set"
+                  ? {
+                      type: "set",
+                      ...(command.objective === undefined ? {} : { objective: command.objective }),
+                      ...(command.status === undefined ? {} : { status: command.status }),
+                      ...(command.tokenBudget === undefined
+                        ? {}
+                        : { tokenBudget: command.tokenBudget }),
+                    }
+                  : { type: command.type === "thread.goal.clear" ? "clear" : "refresh" },
+            },
+          } satisfies PendingOrchestrationEffectV2,
+        ]);
+        break;
+      }
       case "thread.create":
         yield* dispatchThreadCreate(command, events);
         break;

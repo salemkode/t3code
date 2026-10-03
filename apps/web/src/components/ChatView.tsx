@@ -174,6 +174,7 @@ import {
   type ComposerSubmissionIntent,
   collapseExpandedComposerCursor,
   parseStandaloneComposerSlashCommand,
+  parseComposerGoalCommand,
 } from "../composer-logic";
 import {
   derivePendingApprovals,
@@ -422,6 +423,7 @@ import {
   resolveComposerTimelineInset,
   resolveScrollToEndClearance,
 } from "./composerFooterLayout";
+import { ThreadGoal } from "./chat/ThreadGoal";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -3481,7 +3483,7 @@ export default function ChatView(props: ChatViewProps) {
     }
     const sessionError =
       serverProjection.providerSessions.findLast(
-        (session) => session.providerInstanceId === serverProjection.thread.providerInstanceId,
+        (session) => session.providerInstanceId === serverProjection?.thread.providerInstanceId,
       )?.lastError ?? null;
     const latestRun =
       usageLimitRunPresentedAsLatest(
@@ -7934,6 +7936,73 @@ export default function ChatView(props: ChatViewProps) {
       setThreadError,
     ],
   );
+  const goalCreatedThreads = useRef(new Set<ThreadId>());
+  const [goalEditorRequest, setGoalEditorRequest] = useState(0);
+  const [goalObjectiveDraft, setGoalObjectiveDraft] = useState<string | null>(null);
+  const supportsNativeGoals =
+    activeProviderStatus?.driver === "codex" &&
+    serverConfig?.environment.capabilities.nativeGoals === true &&
+    multipleModelSelections === null;
+  const openGoalEditor = (objective: string | null) => {
+    setGoalObjectiveDraft(objective);
+    setGoalEditorRequest((request) => request + 1);
+  };
+  const onGoalCommand = () => openGoalEditor(null);
+  const prepareGoalThread = async () => {
+    if (isServerThread || goalCreatedThreads.current.has(threadId)) return true;
+    if (!activeThread || !activeProject || !isLocalDraftThread) return false;
+    // Goal activation must not bypass the normal worktree preparation flow.
+    if (envMode === "worktree" && activeThread.worktreePath === null) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Prepare the worktree first",
+          description: "Send the first message to create this worktree, then create its Goal.",
+        }),
+      );
+      return false;
+    }
+    const selection = composerRef.current?.getSendContext()?.selectedModelSelection;
+    if (!selection) return false;
+    const result = await createThread({
+      environmentId: activeThread.environmentId,
+      input: {
+        threadId: activeThread.id,
+        projectId: activeProject.id,
+        title: "New Goal",
+        modelSelection: selection,
+        runtimeMode: activeThread.runtimeMode,
+        interactionMode: activeThread.interactionMode,
+        branch: activeThreadBranch,
+        worktreePath: activeThread.worktreePath,
+        createdAt: activeThread.createdAt,
+      },
+    });
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not create the Goal thread",
+          description: error instanceof Error ? error.message : "Try again after reconnecting.",
+        }),
+      );
+      return false;
+    }
+    goalCreatedThreads.current.add(activeThread.id);
+    return true;
+  };
+  const onGoalSubmitted = () => {
+    setGoalEditorRequest(0);
+    setGoalObjectiveDraft(null);
+    if (routeKind !== "draft" || !activeThread) return;
+    useComposerDraftStore.getState().markDraftThreadPromoting(composerDraftTarget, routeThreadRef);
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(routeThreadRef),
+    });
+  };
+
   const onCompactContext = async () => {
     if (compactDisabled || !activeThread || !clientSettingsHydrated || sendInFlightRef.current) {
       return;
@@ -8512,6 +8581,25 @@ export default function ChatView(props: ChatViewProps) {
           resetCursor: (options) => composerRef.current?.resetCursorState(options),
         });
       }
+      return;
+    }
+    const goalCommand = parseComposerGoalCommand(trimmed);
+    if (goalCommand && activeProviderStatus?.driver === "codex") {
+      if (!supportsNativeGoals) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Goals are unavailable for this thread",
+            description:
+              "Use one Codex model and an environment running the patched Goals server. Updating the desktop client alone does not update a remote server.",
+          }),
+        );
+        return;
+      }
+      openGoalEditor(goalCommand.objective);
+      promptRef.current = "";
+      setComposerDraftPrompt(composerDraftTarget, "");
+      composerRef.current?.resetCursorState();
       return;
     }
     // Providers without the legacy toggle receive their native commands unchanged.
@@ -10604,6 +10692,25 @@ export default function ChatView(props: ChatViewProps) {
           />
         </header>
 
+        {supportsNativeGoals ? (
+          <ThreadGoal
+            key={`${activeThreadKey}:${goalEditorRequest}`}
+            thread={serverProjection?.thread ?? { id: activeThread.id }}
+            environmentId={activeThread.environmentId}
+            persisted={serverProjection !== null}
+            editorRequest={goalEditorRequest}
+            objectiveDraft={goalObjectiveDraft}
+            prepareThread={prepareGoalThread}
+            onSubmitted={onGoalSubmitted}
+            supportsTokenBudget={
+              serverProjection?.providerSessions.find(
+                (session) =>
+                  session.providerInstanceId === serverProjection.thread.providerInstanceId,
+              )?.capabilities.goals?.supportsTokenBudget ?? true
+            }
+          />
+        ) : null}
+
         {/* Main content area with optional plan sidebar */}
         <div className="relative flex min-h-0 min-w-0 flex-1">
           {/* Chat column */}
@@ -10981,6 +11088,7 @@ export default function ChatView(props: ChatViewProps) {
                               onPageScrollKeyDown={onComposerPageScrollKeyDown}
                               onPageScrollKeyUp={onComposerPageScrollKeyUp}
                               onPageScrollRelease={onComposerPageScrollRelease}
+                              {...(supportsNativeGoals ? { onGoalCommand } : {})}
                               onCompactContext={onCompactContext}
                               onSend={onSend}
                               onResume={onResume}

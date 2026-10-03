@@ -46,6 +46,7 @@ import * as ProviderTurnStartService from "../ProviderTurnStartService.ts";
 import { worktreeRepairDependenciesTestLayer } from "../ProviderTurnStartService.testkit.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
 import * as RunFinalizationService from "../RunFinalizationService.ts";
+import * as ThreadGoalService from "../ThreadGoalService.ts";
 import * as ThreadTitleRegenerationService from "../ThreadTitleRegenerationService.ts";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
 import * as TurnItemPositionStore from "../TurnItemPositionStore.ts";
@@ -454,6 +455,19 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
         providerTurnStartServiceProvided,
         runtimeRequestServiceProvided,
         threadTitleRegenerationTestLayer,
+        ThreadGoalService.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              storesLayer,
+              providerSessionManagerProvided,
+              providerEventIngestorProvided,
+              IdAllocator.layer,
+              runtimeLayer,
+              eventSinkProvided,
+              ThreadCommandExecutor.layer,
+            ),
+          ),
+        ),
         serverSettingsLayer,
         threadManagementProvided,
       ),

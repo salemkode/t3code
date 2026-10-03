@@ -158,6 +158,26 @@ describe("orchestration V2 wire projection", () => {
 
     expect(shell.latestVisibleMessage).toBeNull();
     expect(JSON.stringify(shell).length).toBeLessThan(2_000);
+    const goal = {
+      objective: "Finish the Goal",
+      status: "paused",
+      createdAt: DateTime.formatIso(now),
+      updatedAt: DateTime.formatIso(now),
+      timeUsedSeconds: 12,
+      tokensUsed: 100,
+      tokenBudget: 2000,
+    } as const;
+    const wire = projectDomainEventForWire({
+      id: EventId.make("event:goal-wire"),
+      type: "thread.goal-updated",
+      threadId: projection.thread.id,
+      occurredAt: now,
+      payload: { ...projection.thread, goal },
+    });
+    expect(wire.type).toBe("thread.metadata-updated");
+    if (wire.type !== "thread.metadata-updated")
+      throw new Error("Expected compatible metadata event");
+    expect(wire.payload.goal).toEqual(goal);
   });
 
   it("omits oversized dynamic tool results without mutating persistence data", () => {

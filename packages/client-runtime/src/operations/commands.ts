@@ -552,6 +552,30 @@ export const markThreadUnread = Effect.fn("EnvironmentCommands.markThreadUnread"
   });
 });
 
+export const updateThreadGoal = Effect.fn("EnvironmentCommands.updateThreadGoal")(function* (
+  input: ThreadCommandInput & {
+    readonly operation:
+      | {
+          readonly type: "set";
+          readonly objective?: string;
+          readonly status?: "active" | "paused";
+          readonly tokenBudget?: number | null;
+        }
+      | { readonly type: "clear" | "refresh" };
+  },
+) {
+  const commandId = yield* allocateCommandId(input);
+  return yield* dispatch(
+    input.operation.type === "set"
+      ? { ...input.operation, type: "thread.goal.set", commandId, threadId: input.threadId }
+      : {
+          type: input.operation.type === "clear" ? "thread.goal.clear" : "thread.goal.refresh",
+          commandId,
+          threadId: input.threadId,
+        },
+  );
+});
+
 export const updateThreadMetadata = Effect.fn("EnvironmentCommands.updateThreadMetadata")(
   function* (input: UpdateThreadMetadataInput) {
     const commandId = yield* allocateCommandId(input);

@@ -389,6 +389,36 @@ export const layer: Layer.Layer<
     const normalize: ProviderEventIngestorV2Shape["normalize"] = (input) =>
       Effect.gen(function* () {
         switch (input.event.type) {
+          case "goal.updated": {
+            const thread = yield* projections.getThread(input.event.threadId);
+            if (
+              thread.deletedAt !== null ||
+              thread.activeProviderThreadId !== input.event.providerThreadId ||
+              thread.providerInstanceId !== input.providerInstanceId
+            )
+              return [];
+            // RPC responses and streamed notifications share a runtime revision.
+            // A delayed response or duplicate must not roll back newer state.
+            if (
+              thread.goalSynchronization?.runtimeId === input.event.runtimeId &&
+              thread.goalSynchronization.sequence >= input.event.sequence
+            )
+              return [];
+            return [
+              yield* makeDomainEvent(input, {
+                type: "thread.goal-updated",
+                threadId: thread.id,
+                payload: {
+                  ...thread,
+                  goal: input.event.goal,
+                  goalSynchronization: {
+                    runtimeId: input.event.runtimeId,
+                    sequence: input.event.sequence,
+                  },
+                },
+              }),
+            ];
+          }
           case "app_thread.created":
             return [
               yield* makeDomainEvent(input, {

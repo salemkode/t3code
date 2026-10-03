@@ -23,6 +23,7 @@ import {
   formatAssistantCitationForComposer,
   isCollapsedCursorAdjacentToInlineToken,
   parseStandaloneComposerSlashCommand,
+  parseComposerGoalCommand,
   replaceTextRange,
 } from "./composer-logic";
 import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
@@ -807,5 +808,20 @@ describe("parseStandaloneComposerSlashCommand", () => {
 
   it("ignores slash commands with extra message text", () => {
     expect(parseStandaloneComposerSlashCommand("/plan explain this")).toBeNull();
+  });
+});
+
+describe("native Goal command", () => {
+  it("opens the editor for a bare command and accepts an objective", () => {
+    expect(parseComposerGoalCommand(" /GOAL ")).toEqual({ objective: null });
+    expect(parseComposerGoalCommand("/goal Fix reconnects\nPreserve pending work")).toEqual({
+      objective: "Fix reconnects\nPreserve pending work",
+    });
+  });
+  it("leaves other commands and ordinary mentions as agent text", () => {
+    expect(parseComposerGoalCommand("/goals")).toBeNull();
+    expect(parseComposerGoalCommand("Explain /goal")).toBeNull();
+    expect(parseComposerGoalCommand("/goalkeeper")).toBeNull();
+    expect(parseStandaloneComposerSlashCommand("/goal")).toBeNull();
   });
 });

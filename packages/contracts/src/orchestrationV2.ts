@@ -308,7 +308,33 @@ export const OrchestrationV2IdentityCapabilities = Schema.Struct({
 });
 export type OrchestrationV2IdentityCapabilities = typeof OrchestrationV2IdentityCapabilities.Type;
 
+export const OrchestrationV2ThreadGoal = Schema.Struct({
+  objective: TrimmedNonEmptyString,
+  status: Schema.Literals([
+    "active",
+    "paused",
+    "blocked",
+    "usageLimited",
+    "budgetLimited",
+    "complete",
+  ]),
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+  timeUsedSeconds: Schema.NullOr(NonNegativeInt),
+  tokensUsed: Schema.NullOr(NonNegativeInt),
+  tokenBudget: Schema.NullOr(PositiveInt),
+});
+export type OrchestrationV2ThreadGoal = typeof OrchestrationV2ThreadGoal.Type;
+
+export const OrchestrationV2GoalUpdate = Schema.Struct({
+  objective: Schema.optional(TrimmedNonEmptyString),
+  status: Schema.optional(Schema.Literals(["active", "paused"])),
+  tokenBudget: Schema.optional(Schema.NullOr(PositiveInt)),
+});
+export type OrchestrationV2GoalUpdate = typeof OrchestrationV2GoalUpdate.Type;
+
 export const OrchestrationV2ProviderCapabilities = Schema.Struct({
+  goals: Schema.optional(Schema.Struct({ supportsTokenBudget: Schema.Boolean })),
   sessions: OrchestrationV2SessionCapabilities,
   threads: OrchestrationV2ThreadCapabilities,
   turns: OrchestrationV2TurnCapabilities,
@@ -370,6 +396,19 @@ export const OrchestrationV2AppThread = Schema.Struct({
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   /** Pull request discovered from the thread's current branch. */
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  goal: Schema.optional(Schema.NullOr(OrchestrationV2ThreadGoal)),
+  goalSynchronization: Schema.optional(
+    Schema.NullOr(Schema.Struct({ runtimeId: Schema.String, sequence: NonNegativeInt })),
+  ),
+  goalOperation: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        requestId: CommandId,
+        status: Schema.Literals(["pending", "failed"]),
+        error: Schema.optional(Schema.String),
+      }),
+    ),
+  ),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
   historyOrigin: Schema.optional(OrchestrationV2ThreadHistoryOrigin),
   lineage: OrchestrationV2AppThreadLineage,
@@ -1520,6 +1559,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.visited",
       "thread.marked-unread",
       "thread.metadata-updated",
+      "thread.goal-updated",
       "thread.pull-request-synced",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
@@ -1699,6 +1739,8 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   lineage: OrchestrationV2AppThreadLineage,
   forkedFrom: Schema.NullOr(OrchestrationV2AppThread.fields.forkedFrom),
+  goal: Schema.optional(Schema.NullOr(OrchestrationV2ThreadGoal)),
+  goalOperation: OrchestrationV2AppThread.fields.goalOperation,
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
   historyOrigin: Schema.optional(OrchestrationV2ThreadHistoryOrigin),
   latestRunId: Schema.NullOr(RunId),
@@ -2312,6 +2354,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.marked-unread",
       "thread.pull-request-synced",
       "thread.metadata-updated",
+      "thread.goal-updated",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
       "thread.model-selection-updated",
@@ -2435,6 +2478,17 @@ export const OrchestrationV2StoredEventJson = Schema.Struct({
 export type OrchestrationV2StoredEventJson = typeof OrchestrationV2StoredEventJson.Type;
 
 export const OrchestrationV2Command = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("thread.goal.set"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    ...OrchestrationV2GoalUpdate.fields,
+  }),
+  Schema.Struct({
+    type: Schema.Literals(["thread.goal.clear", "thread.goal.refresh"]),
+    commandId: CommandId,
+    threadId: ThreadId,
+  }),
   Schema.Struct({
     type: Schema.Literal("thread.create"),
     ...OrchestrationV2CreationFields,

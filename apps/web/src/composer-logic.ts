@@ -12,7 +12,7 @@ import {
 import { resolveShortcutCommand, type ShortcutEventLike } from "./keybindings";
 
 export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default";
+export type ComposerSlashCommand = "model" | "plan" | "default" | "goal";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
 export interface ComposerTrigger {
@@ -302,9 +302,15 @@ export function composerStateAtPromptEnd(text: string): {
   };
 }
 
+/** Recognize the native Goal entry point without forwarding it as an agent prompt. */
+export function parseComposerGoalCommand(text: string) {
+  const match = /^\/goal(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  return match ? { objective: match[1]?.trim() || null } : null;
+}
+
 export function parseStandaloneComposerSlashCommand(
   text: string,
-): Exclude<ComposerSlashCommand, "model"> | null {
+): Exclude<ComposerSlashCommand, "model" | "goal"> | null {
   const match = /^\/(plan|default)\s*$/i.exec(text.trim());
   if (!match) {
     return null;

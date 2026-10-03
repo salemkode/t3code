@@ -85,6 +85,7 @@ import {
   unsettleThread,
   unsnoozeThread,
   updateThreadMetadata,
+  updateThreadGoal,
   visitThread,
 } from "../operations/commands.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -230,6 +231,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     markUnread: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:mark-unread",
       execute: (input: MarkThreadUnreadInput) => markThreadUnread(input),
+      scheduler,
+      concurrency,
+    }),
+    updateGoal: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:update-goal",
+      execute: (input: Parameters<typeof updateThreadGoal>[0]) => updateThreadGoal(input),
       scheduler,
       concurrency,
     }),

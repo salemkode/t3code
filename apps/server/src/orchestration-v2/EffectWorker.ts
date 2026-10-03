@@ -24,6 +24,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
+import * as ThreadGoalService from "./ThreadGoalService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -87,6 +88,7 @@ export const executorLayer: Layer.Layer<
   | ProviderTurnControlService.ProviderTurnControlServiceV2
   | ProviderTurnStartService.ProviderTurnStartServiceV2
   | RuntimeRequestService.RuntimeRequestServiceV2
+  | ThreadGoalService.ThreadGoalService
   | ThreadTitleRegenerationService.ThreadTitleRegenerationService
   | ThreadManagementService.ThreadManagementService
   | ServerSettings.ServerSettingsService
@@ -103,6 +105,7 @@ export const executorLayer: Layer.Layer<
     const threadTitleRegeneration =
       yield* ThreadTitleRegenerationService.ThreadTitleRegenerationService;
     const threads = yield* ThreadManagementService.ThreadManagementService;
+    const goals = yield* ThreadGoalService.ThreadGoalService;
     const settings = yield* ServerSettings.ServerSettingsService;
     return OrchestrationEffectExecutorV2.of({
       execute: (effect, options) => {
@@ -435,6 +438,29 @@ export const executorLayer: Layer.Layer<
                   }),
               ),
             );
+          case "thread-goal.update":
+            return goals
+              .execute({
+                commandId: effect.commandId,
+                willRetry,
+                requestedAt: DateTime.makeUnsafe(effect.createdAt),
+                ...(effect.request.previousGoal === undefined
+                  ? {}
+                  : { previousGoal: effect.request.previousGoal }),
+                threadId: effect.threadId,
+                providerInstanceId: effect.request.providerInstanceId,
+                operation: effect.request.operation,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationEffectExecutionError({
+                      effectId: effect.id,
+                      effectType: effect.request.type,
+                      cause,
+                    }),
+                ),
+              );
           case "thread-title.generate":
             return threadTitleRegeneration
               .execute({

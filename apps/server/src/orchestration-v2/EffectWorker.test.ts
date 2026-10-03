@@ -27,6 +27,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
+import * as ThreadGoalService from "./ThreadGoalService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -137,6 +138,7 @@ function makeExecutorLayer(input: {
       RuntimeRequestService.RuntimeRequestServiceV2,
       RuntimeRequestService.RuntimeRequestServiceV2.of({ respond: () => Effect.void }),
     ),
+    Layer.succeed(ThreadGoalService.ThreadGoalService, { execute: () => Effect.void }),
     Layer.succeed(
       ThreadTitleRegenerationService.ThreadTitleRegenerationService,
       ThreadTitleRegenerationService.ThreadTitleRegenerationService.of({

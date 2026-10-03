@@ -367,6 +367,7 @@ export function routeProviderEvent(
   });
 
   switch (event.type) {
+    case "goal.updated":
     case "provider_session.updated":
       // The session manager persists process-wide status once for every
       // attached app thread before broadcasting the adapter event.

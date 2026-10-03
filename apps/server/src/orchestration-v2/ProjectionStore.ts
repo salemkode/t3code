@@ -651,6 +651,7 @@ export function applyToProjection(
     case "thread.unpinned":
     case "thread.pin-reordered":
     case "thread.active-reordered":
+    case "thread.goal-updated":
     case "thread.metadata-updated":
     case "thread.pull-request-synced":
     case "thread.runtime-mode-updated":
@@ -736,6 +737,10 @@ export function applyToProjection(
           !isQueuedProviderThreadPlaceholder(event.payload)
             ? {
                 ...base.thread,
+                ...(base.thread.activeProviderThreadId === event.payload.id ||
+                base.thread.activeProviderThreadId === null
+                  ? {}
+                  : { goal: null, goalSynchronization: null }),
                 activeProviderThreadId: event.payload.id,
               }
             : base.thread,
@@ -1341,6 +1346,8 @@ export function threadShellFromProjection(
     id: projection.thread.id,
     projectId: projection.thread.projectId,
     title: projection.thread.title,
+    goal: projection.thread.goal ?? null,
+    goalOperation: projection.thread.goalOperation ?? null,
     providerInstanceId: projection.thread.providerInstanceId,
     modelSelection: projection.thread.modelSelection,
     runtimeMode: projection.thread.runtimeMode,
@@ -1574,6 +1581,8 @@ function shellFromState(input: {
     id: input.state.thread.id,
     projectId: input.state.thread.projectId,
     title: input.state.thread.title,
+    goal: input.state.thread.goal ?? null,
+    goalOperation: input.state.thread.goalOperation ?? null,
     providerInstanceId: input.state.thread.providerInstanceId,
     modelSelection: input.state.thread.modelSelection,
     runtimeMode: input.state.thread.runtimeMode,
@@ -1678,6 +1687,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           case "thread.active-reordered":
           case "thread.visited":
           case "thread.marked-unread":
+          case "thread.goal-updated":
           case "thread.metadata-updated":
           case "thread.pull-request-synced":
           case "thread.runtime-mode-updated":
@@ -2082,6 +2092,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 const thread = yield* decodeThreadPayload(threadRow.payload_json);
                 const updatedThread = {
                   ...thread,
+                  ...(thread.activeProviderThreadId === event.payload.id ||
+                  thread.activeProviderThreadId === null
+                    ? {}
+                    : { goal: null, goalSynchronization: null }),
                   activeProviderThreadId: event.payload.id,
                   updatedAt: event.payload.updatedAt,
                 };

@@ -1633,6 +1633,7 @@ export interface ChatComposerProps {
   onRemoveEditingQueuedAttachment: (attachmentId: string) => void;
 
   // Callbacks
+  onGoalCommand?: () => void;
   onCompactContext: () => void;
   onSend: (
     e?: { preventDefault: () => void },
@@ -1757,6 +1758,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onPageScrollKeyDown,
     onPageScrollKeyUp,
     onPageScrollRelease,
+    onGoalCommand,
     onCompactContext,
     onSend,
     onResume,
@@ -2591,6 +2593,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     }
     if (composerTrigger.kind === "slash-command") {
       const builtInSlashCommandItems = [
+        ...(onGoalCommand
+          ? [
+              {
+                id: "slash:goal",
+                type: "slash-command",
+                command: "goal",
+                label: "/goal",
+                description: "Create or edit the native Codex Goal",
+              } as const,
+            ]
+          : []),
         {
           id: "slash:model",
           type: "slash-command",
@@ -2721,6 +2734,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   }, [
     activeThreadId,
     compactSlashCommandAvailable,
+    onGoalCommand,
     composerTrigger,
     environmentId,
     environmentThreadShells,
@@ -3891,6 +3905,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return;
       }
       if (item.type === "slash-command") {
+        if (item.command === "goal") {
+          const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+            expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+            focusEditorAfterReplace: false,
+          });
+          if (applied) {
+            setComposerHighlightedItemId(null);
+            onGoalCommand?.();
+          }
+          return;
+        }
         if (item.command === "model") {
           const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
             expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -4023,6 +4048,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       handleInteractionModeChange,
       planModeUiEnabled,
       onUsageLimitsCommand,
+      onGoalCommand,
       resolveActiveComposerTrigger,
     ],
   );
