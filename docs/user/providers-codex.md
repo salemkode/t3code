@@ -99,6 +99,17 @@ when it resets, when Codex reports them. Send the message again after the reset.
 message also says whether your workspace owner needs to add credits or raise the
 spend limit to continue sooner.
 
+## Work toward a Goal
+
+On web and desktop, select Codex and choose `/goal` from the composer menu, or
+send `/goal <objective>` to pre-fill the Goal editor. You can start in an empty
+thread using the current checkout. Codex owns execution and accounting; the Goal
+card keeps its state available as you continue the conversation.
+
+The selected environment must support Goals, including when connecting remotely.
+Updating the desktop client alone does not update a remote server. For a new
+worktree, send the first message to prepare it before creating its Goal.
+
 ## Send feedback to OpenAI
 
 In an existing Codex thread, send `/feedback` with an optional description, for
