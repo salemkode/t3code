@@ -19,29 +19,47 @@ export function ThreadGoal({
   thread,
   environmentId,
   supportsTokenBudget,
+  persisted = true,
+  editorRequest = 0,
+  objectiveDraft = null,
+  prepareThread,
+  onSubmitted,
 }: {
-  thread: OrchestrationV2AppThread;
+  thread: Pick<OrchestrationV2AppThread, "id" | "goal" | "goalOperation">;
   environmentId: EnvironmentId;
   supportsTokenBudget: boolean;
+  persisted?: boolean;
+  editorRequest?: number;
+  objectiveDraft?: string | null;
+  prepareThread?: () => Promise<boolean>;
+  onSubmitted?: () => void;
 }) {
   const updateGoal = useAtomCommand(threadEnvironment.updateGoal);
-  const [editing, setEditing] = useState(false);
-  const [objective, setObjective] = useState("");
-  const [budget, setBudget] = useState("");
+  const [editing, setEditing] = useState(editorRequest > 0);
+  const [objective, setObjective] = useState(objectiveDraft ?? thread.goal?.objective ?? "");
+  const [budget, setBudget] = useState(thread.goal?.tokenBudget?.toString() ?? "");
   const [submitting, setSubmitting] = useState(false);
   const goal = thread.goal ?? null;
   useEffect(() => {
+    if (!persisted) return;
     void updateGoal({
       environmentId,
       input: { threadId: thread.id, operation: { type: "refresh" } },
     });
-  }, [environmentId, thread.id, updateGoal]);
+  }, [environmentId, persisted, thread.id, updateGoal]);
 
   const submit = async (operation: Parameters<typeof updateGoal>[0]["input"]["operation"]) => {
     setSubmitting(true);
+    if (prepareThread && !(await prepareThread())) {
+      setSubmitting(false);
+      return;
+    }
     const result = await updateGoal({ environmentId, input: { threadId: thread.id, operation } });
     setSubmitting(false);
-    if (result._tag === "Success") setEditing(false);
+    if (result._tag === "Success") {
+      setEditing(false);
+      onSubmitted?.();
+    }
   };
   const edit = () => {
     setObjective(goal?.objective ?? "");
